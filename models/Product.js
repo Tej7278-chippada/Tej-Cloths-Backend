@@ -9,7 +9,7 @@ const ProductSchema = new mongoose.Schema({
   gender: { type: String, enum: ['Male', 'Female', 'Kids'], required: true },
   deliveryDays: { type: Number, required: true },
   description: { type: String },
-  images: [String],
+  media: [Buffer], // Store images as Buffer data
   videos: [String],
   likes: { type: Number, default: 0 },
   comments: [{ user: String, text: String, date: { type: Date, default: Date.now } }],

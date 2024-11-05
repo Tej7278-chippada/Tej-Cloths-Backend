@@ -5,26 +5,30 @@ const Product = require('../models/Product');
 const router = express.Router();
 
 // Multer setup for file uploads // Backend: Setting up Multer to accept a "media" field for images or videos
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, 'uploads/'); // Specify the folder for storing files
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + '-' + file.originalname); // Generate unique filename
-  }
-});
+// const storage = multer.diskStorage({
+//   destination: (req, file, cb) => {
+//     cb(null, 'uploads/'); // Specify the folder for storing files
+//   },
+//   filename: (req, file, cb) => {
+//     cb(null, Date.now() + '-' + file.originalname); // Generate unique filename
+//   }
+// });
+
+// Configure multer to store files in memory as buffers
+const storage = multer.memoryStorage();
 
 // Initialize multer with the storage configuration
 const upload = multer({ storage: storage });
 
 // Add product
-router.post('/add/products', upload.fields([{ name: 'media', maxCount: 5 }]), async (req, res) => {
+router.post('/add/products', upload.array('media', 5), async (req, res) => {
   try {
     const { title, price, stockStatus, stockCount, gender, deliveryDays, description } = req.body;
     // Log incoming form data and file data
     console.log("Form data:", req.body);
     console.log("Files:", req.files);
-    const mediaPaths = req.files['media'] ? req.files['media'].map(file => file.path) : [];
+    // Process the uploaded files
+    const mediaBuffers = req.files ? req.files.map(file => file.buffer) : [];
 
     const product = new Product({
       title,
@@ -34,7 +38,7 @@ router.post('/add/products', upload.fields([{ name: 'media', maxCount: 5 }]), as
       gender,
       deliveryDays,
       description,
-      media: mediaPaths,
+      media: mediaBuffers,
     });
     await product.save();
     res.status(201).json({ product });
@@ -48,9 +52,18 @@ router.post('/add/products', upload.fields([{ name: 'media', maxCount: 5 }]), as
 router.get('/', async (req, res) => {
   try {
     const products = await Product.find();
-    res.json(products);
+    // res.json(products);
+    // Convert each product's media buffer to base64
+    const productsWithBase64Images = products.map((product) => {
+      return {
+        ...product.toObject(),
+        media: product.media.map((buffer) => buffer.toString('base64')),
+      };
+    });
+
+    res.json(productsWithBase64Images);
   } catch (err) {
-    res.status(500).json({ message: 'Error fetching products' });
+    res.status(500).json({ message: 'Error fetching products', error: err.message });
   }
 });
 
@@ -68,6 +81,7 @@ router.put('/:id', upload.fields([{ name: 'media', maxCount: 5 }]), async (req, 
       gender,
       deliveryDays,
       description,
+      
     };
 
     if (mediaPaths) {
