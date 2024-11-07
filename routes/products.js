@@ -3,6 +3,7 @@ const express = require('express');
 const multer = require('multer');
 const Product = require('../models/Product');
 const router = express.Router();
+const sharp = require('sharp');
 
 // Multer setup for file uploads // Backend: Setting up Multer to accept a "media" field for images or videos
 // const storage = multer.diskStorage({
@@ -18,7 +19,10 @@ const router = express.Router();
 const storage = multer.memoryStorage();
 
 // Initialize multer with the storage configuration
-const upload = multer({ storage: storage });
+const upload = multer({
+  limits: { fileSize: 2 * 1024 * 1024 }, // Limit file size to 5MB
+  storage: multer.memoryStorage(),
+});
 
 // Add product
 router.post('/add/products', upload.array('media', 5), async (req, res) => {
@@ -28,7 +32,15 @@ router.post('/add/products', upload.array('media', 5), async (req, res) => {
     console.log("Form data:", req.body);
     console.log("Files:", req.files);
     // Process the uploaded files
-    const mediaBuffers = req.files ? req.files.map(file => file.buffer) : [];
+    const compressedImages = await Promise.all(
+      req.files.map(async (file) => {
+        const buffer = await sharp(file.buffer)
+          .resize({ width: 800 }) // Resize to 800px width, maintaining aspect ratio
+          .jpeg({ quality: 20 }) // Compress to 70% quality
+          .toBuffer();
+        return buffer;
+      })
+    );
 
     const product = new Product({
       title,
@@ -38,7 +50,7 @@ router.post('/add/products', upload.array('media', 5), async (req, res) => {
       gender,
       deliveryDays,
       description,
-      media: mediaBuffers,
+      media: compressedImages,
     });
     await product.save();
     res.status(201).json({ product });
@@ -54,16 +66,19 @@ router.get('/', async (req, res) => {
     const products = await Product.find();
     // res.json(products);
     // Convert each product's media buffer to base64
-    const productsWithBase64Images = products.map((product) => {
-      return {
-        ...product.toObject(),
-        media: product.media.map((buffer) => buffer.toString('base64')),
-      };
-    });
+    // Convert each image buffer in `media` to a base64 string
+    // res.set('Cache-Control', 'public, max-age=3600'); // Cache for 1 hour
+    const productsWithBase64Media = products.map((product) => ({
+      ...product._doc,
+      media: product.media.map((buffer) => buffer.toString('base64')),
+    }));
+    res.json(productsWithBase64Media);
+    
+    
 
-    res.json(productsWithBase64Images);
   } catch (err) {
-    res.status(500).json({ message: 'Error fetching products', error: err.message });
+    console.error("Error fetching products:", error);
+    res.status(500).json({ message: "Failed to fetch products" });
   }
 });
 
